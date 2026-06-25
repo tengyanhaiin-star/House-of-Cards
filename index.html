@@ -211,7 +211,27 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // ─── Card geometry constants ─────────────────────────────────
-const CARD_W = 0.63, CARD_H = 0.88, CARD_T = 0.008;
+const CARD_W = 0.63, CARD_H = 0.88, CARD_T = 0.004;
+const CARD_R = 0.03; // corner radius
+
+function makeCardGeometry() {
+  const w = CARD_W, h = CARD_H, r = CARD_R;
+  const shape = new THREE.Shape();
+  shape.moveTo(-w/2 + r, -h/2);
+  shape.lineTo( w/2 - r, -h/2);
+  shape.quadraticCurveTo( w/2, -h/2,  w/2, -h/2 + r);
+  shape.lineTo( w/2,  h/2 - r);
+  shape.quadraticCurveTo( w/2,  h/2,  w/2 - r,  h/2);
+  shape.lineTo(-w/2 + r,  h/2);
+  shape.quadraticCurveTo(-w/2,  h/2, -w/2,  h/2 - r);
+  shape.lineTo(-w/2, -h/2 + r);
+  shape.quadraticCurveTo(-w/2, -h/2, -w/2 + r, -h/2);
+
+  return new THREE.ExtrudeGeometry(shape, {
+    depth: CARD_T,
+    bevelEnabled: false,
+  });
+}
 const lean   = 69 * Math.PI / 180;
 const sinL   = Math.sin(lean), cosL = Math.cos(lean);
 const LEAN_X_HALF   = CARD_H * cosL / 2;
@@ -222,16 +242,22 @@ const FLAT_SPACING_X = CARD_W;
 const FLAT_SPACING_Z = CARD_H;
 
 // ─── Create a card mesh with given front/back textures ───────
-const edgeMat = new THREE.MeshStandardMaterial({ color: 0xfaf0f0, roughness: 0.6 });
+const edgeMat  = new THREE.MeshStandardMaterial({ color: 0xfaf0f0, roughness: 0.6 });
 
 function createCard(frontTex, backTex) {
-  const geo  = new THREE.BoxGeometry(CARD_W, CARD_H, CARD_T);
+  const geo  = makeCardGeometry();
+  // ExtrudeGeometry: group 0 = front face, group 1 = back face, group 2 = side
+  // By default extrude goes in +Z, so group 0 is the "front" (+Z face)
+  // We want: group 0 → backTex (visible from front of card in Three.js default),
+  //          group 1 → frontTex, group 2 → edge
   const mats = [
-    edgeMat, edgeMat, edgeMat, edgeMat,
     new THREE.MeshBasicMaterial({ map: backTex }),
     new THREE.MeshBasicMaterial({ map: frontTex }),
+    edgeMat,
   ];
   const mesh = new THREE.Mesh(geo, mats);
+  // Shift geometry so card is centred on Z axis (extrude goes 0→CARD_T)
+  mesh.geometry.translate(0, 0, -CARD_T / 2);
   mesh.castShadow = true; mesh.receiveShadow = true;
   return mesh;
 }
