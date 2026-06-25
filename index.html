@@ -89,11 +89,17 @@ async function loadSvgSprite() {
 async function loadFontBase64() {
   try {
     const fontRes = await fetch('NoticiaText-Regular.woff2');
+    if (!fontRes.ok) throw new Error(`HTTP ${fontRes.status}`);
     const fontBuf = await fontRes.arrayBuffer();
-    const bytes   = new Uint8Array(fontBuf);
+    // Convert ArrayBuffer to base64 in chunks to avoid call stack overflow
+    const bytes = new Uint8Array(fontBuf);
+    const chunkSize = 8192;
     let binary = '';
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
     fontBase64 = btoa(binary);
+    console.log('Font loaded OK, base64 length:', fontBase64.length);
   } catch(e) {
     console.warn('Font load failed:', e);
   }
@@ -119,6 +125,7 @@ function svgCardToTexture(cardId) {
         font-weight: 400;
         src: url('data:font/woff2;base64,${fontBase64}') format('woff2');
       }
+      text, tspan { font-family: 'Noticia Text', serif !important; }
     </style>` : '';
 
     const fillAttr = cardId === 'back' ? 'color="#1a56db" fill="#1a56db"' : '';
