@@ -390,7 +390,7 @@ let cardTextures = {}; // id → CanvasTexture
 
 async function loadAllTextures() {
   await loadSvgSprite();
-  const backTex = await svgCardToTexture('alternate-back');
+  const backTex = await svgCardToTexture('back');
   const entries = await Promise.all(
     CARD_IDS.map(id => svgCardToTexture(id).then(tex => [id, tex]))
   );
