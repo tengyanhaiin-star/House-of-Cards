@@ -40,12 +40,12 @@ Because the app fetches `svg-cards.svg` and `NoticiaText-Regular.woff2` at runti
 
 ## Dependencies
 
-| Library | Version | License |
-|---|---|---|
-| [Three.js](https://threejs.org) | r128 | MIT |
-| [SVG-cards](https://github.com/htdebeer/SVG-cards) | 2.0.2 | LGPL-2.1 |
-| [Noticia Text](https://fonts.google.com/specimen/Noticia+Text) | — | OFL-1.1 |
-| [Courier Prime](https://fonts.google.com/specimen/Courier+Prime) | — | OFL-1.1 |
+| Library | License |
+|---|---|
+| [Three.js](https://threejs.org) | MIT |
+| [SVG-cards](https://github.com/htdebeer/SVG-cards) | LGPL-2.1 |
+| [Noticia Text](https://fonts.google.com/specimen/Noticia+Text) | OFL-1.1 |
+| [Courier Prime](https://fonts.google.com/specimen/Courier+Prime) | OFL-1.1 |
 
 ## License
 
