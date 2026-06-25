@@ -77,44 +77,36 @@ for (const suit of SUITS) for (const rank of RANKS) CARD_IDS.push(`${suit}_${ran
 
 // ─── SVG sprite DOM (loaded once) ───────────────────────────
 const TEX_W = 256, TEX_H = Math.round(TEX_W * SVG_H / SVG_W);
-let svgDom = null; // parsed SVG document
+let svgDom = null;
 
 async function loadSvgSprite() {
   const res  = await fetch(SVG_URL);
   const text = await res.text();
-  const parser = new DOMParser();
-  svgDom = parser.parseFromString(text, 'image/svg+xml');
+  svgDom = new DOMParser().parseFromString(text, 'image/svg+xml');
 }
 
-// Extract a card's <g> element by id, inline it into a standalone SVG,
-// render to canvas, return CanvasTexture.
+// Inline the card's subtree into a self-contained SVG string,
+// then draw via <img> → canvas. Works same-origin on GitHub Pages.
 function svgCardToTexture(cardId) {
   return new Promise((resolve) => {
-    // Find the element with the given id
     const el = svgDom.getElementById(cardId);
-    if (!el) {
-      resolve(makeFallbackTexture(cardId)); return;
-    }
+    if (!el) { resolve(makeFallbackTexture(cardId)); return; }
 
-    // Clone it and wrap in a standalone SVG
-    const clone   = el.cloneNode(true);
-    const svgNS   = 'http://www.w3.org/2000/svg';
-    const wrapper = document.createElementNS(svgNS, 'svg');
-    wrapper.setAttribute('xmlns', svgNS);
-    wrapper.setAttribute('viewBox', `0 0 ${SVG_W} ${SVG_H}`);
-    wrapper.setAttribute('width',  TEX_W);
-    wrapper.setAttribute('height', TEX_H);
+    // Build a fully self-contained SVG string with all <defs> inlined
+    const defsEl  = svgDom.querySelector('defs');
+    const defsStr = defsEl ? new XMLSerializer().serializeToString(defsEl) : '';
+    const elStr   = new XMLSerializer().serializeToString(el);
 
-    // Copy over any <defs> from the sprite (gradients, patterns etc.)
-    const defs = svgDom.querySelector('defs');
-    if (defs) wrapper.appendChild(defs.cloneNode(true));
+    const svgStr = `<svg xmlns="http://www.w3.org/2000/svg"
+      xmlns:xlink="http://www.w3.org/1999/xlink"
+      viewBox="0 0 ${SVG_W} ${SVG_H}"
+      width="${TEX_W}" height="${TEX_H}">
+      ${defsStr}${elStr}
+    </svg>`;
 
-    wrapper.appendChild(clone);
-
-    const svgStr = new XMLSerializer().serializeToString(wrapper);
-    const blob   = new Blob([svgStr], { type: 'image/svg+xml' });
-    const url    = URL.createObjectURL(blob);
-    const img    = new Image();
+    const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const img  = new Image();
     img.onload = () => {
       const cv  = document.createElement('canvas');
       cv.width  = TEX_W; cv.height = TEX_H;
