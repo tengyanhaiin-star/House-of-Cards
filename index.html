@@ -137,9 +137,14 @@ function svgCardToTexture(cardId) {
     img.onload = () => {
       const cv  = document.createElement('canvas');
       cv.width  = TEX_W; cv.height = TEX_H;
-      cv.getContext('2d').drawImage(img, 0, 0, TEX_W, TEX_H);
+      const ctx = cv.getContext('2d');
+      ctx.save();
+      clipRoundedRect(ctx, TEX_W, TEX_H, CARD_R);
+      ctx.drawImage(img, 0, 0, TEX_W, TEX_H);
+      ctx.restore();
       URL.revokeObjectURL(url);
-      resolve(new THREE.CanvasTexture(cv));
+      const tex = new THREE.CanvasTexture(cv);
+      resolve(tex);
     };
     img.onerror = () => { URL.revokeObjectURL(url); resolve(makeFallbackTexture(cardId)); };
     img.src = url;
@@ -212,25 +217,23 @@ scene.add(ground);
 
 // ─── Card geometry constants ─────────────────────────────────
 const CARD_W = 0.63, CARD_H = 0.88, CARD_T = 0.004;
-const CARD_R = 0.03; // corner radius
+const CARD_R = 0.03; // corner radius (world units)
 
-function makeCardGeometry() {
-  const w = CARD_W, h = CARD_H, r = CARD_R;
-  const shape = new THREE.Shape();
-  shape.moveTo(-w/2 + r, -h/2);
-  shape.lineTo( w/2 - r, -h/2);
-  shape.quadraticCurveTo( w/2, -h/2,  w/2, -h/2 + r);
-  shape.lineTo( w/2,  h/2 - r);
-  shape.quadraticCurveTo( w/2,  h/2,  w/2 - r,  h/2);
-  shape.lineTo(-w/2 + r,  h/2);
-  shape.quadraticCurveTo(-w/2,  h/2, -w/2,  h/2 - r);
-  shape.lineTo(-w/2, -h/2 + r);
-  shape.quadraticCurveTo(-w/2, -h/2, -w/2 + r, -h/2);
-
-  return new THREE.ExtrudeGeometry(shape, {
-    depth: CARD_T,
-    bevelEnabled: false,
-  });
+// Apply rounded-corner clip to a canvas context before drawing texture
+function clipRoundedRect(ctx, w, h, r) {
+  const rPx = r * (w / CARD_W); // convert world radius to pixel radius
+  ctx.beginPath();
+  ctx.moveTo(rPx, 0);
+  ctx.lineTo(w - rPx, 0);
+  ctx.quadraticCurveTo(w, 0, w, rPx);
+  ctx.lineTo(w, h - rPx);
+  ctx.quadraticCurveTo(w, h, w - rPx, h);
+  ctx.lineTo(rPx, h);
+  ctx.quadraticCurveTo(0, h, 0, h - rPx);
+  ctx.lineTo(0, rPx);
+  ctx.quadraticCurveTo(0, 0, rPx, 0);
+  ctx.closePath();
+  ctx.clip();
 }
 const lean   = 69 * Math.PI / 180;
 const sinL   = Math.sin(lean), cosL = Math.cos(lean);
@@ -242,22 +245,16 @@ const FLAT_SPACING_X = CARD_W;
 const FLAT_SPACING_Z = CARD_H;
 
 // ─── Create a card mesh with given front/back textures ───────
-const edgeMat  = new THREE.MeshStandardMaterial({ color: 0xfaf0f0, roughness: 0.6 });
+const edgeMat = new THREE.MeshStandardMaterial({ color: 0xfaf0f0, roughness: 0.6 });
 
 function createCard(frontTex, backTex) {
-  const geo  = makeCardGeometry();
-  // ExtrudeGeometry: group 0 = front face, group 1 = back face, group 2 = side
-  // By default extrude goes in +Z, so group 0 is the "front" (+Z face)
-  // We want: group 0 → backTex (visible from front of card in Three.js default),
-  //          group 1 → frontTex, group 2 → edge
+  const geo  = new THREE.BoxGeometry(CARD_W, CARD_H, CARD_T);
   const mats = [
-    new THREE.MeshBasicMaterial({ map: frontTex }),
-    edgeMat,
-    //new THREE.MeshBasicMaterial({ map: backTex }),
+    edgeMat, edgeMat, edgeMat, edgeMat,
+    new THREE.MeshBasicMaterial({ map: backTex,  transparent: true }),
+    new THREE.MeshBasicMaterial({ map: frontTex, transparent: true }),
   ];
   const mesh = new THREE.Mesh(geo, mats);
-  // Shift geometry so card is centred on Z axis (extrude goes 0→CARD_T)
-  mesh.geometry.translate(0, 0, -CARD_T / 2);
   mesh.castShadow = true; mesh.receiveShadow = true;
   return mesh;
 }
