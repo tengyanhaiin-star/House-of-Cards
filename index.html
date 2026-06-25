@@ -75,21 +75,46 @@ const CARD_IDS = [];
 for (const suit of SUITS) for (const rank of RANKS) CARD_IDS.push(`${suit}_${rank}`);
 // CARD_IDS.length === 52
 
-// ─── Render one SVG card id → CanvasTexture ──────────────────
-const TEX_W = 256, TEX_H = Math.round(TEX_W * SVG_H / SVG_W); // ~370px
+// ─── SVG sprite DOM (loaded once) ───────────────────────────
+const TEX_W = 256, TEX_H = Math.round(TEX_W * SVG_H / SVG_W);
+let svgDom = null; // parsed SVG document
 
+async function loadSvgSprite() {
+  const res  = await fetch(SVG_URL);
+  const text = await res.text();
+  const parser = new DOMParser();
+  svgDom = parser.parseFromString(text, 'image/svg+xml');
+}
+
+// Extract a card's <g> element by id, inline it into a standalone SVG,
+// render to canvas, return CanvasTexture.
 function svgCardToTexture(cardId) {
   return new Promise((resolve) => {
-    const svgSrc = `
-      <svg xmlns="http://www.w3.org/2000/svg"
-           xmlns:xlink="http://www.w3.org/1999/xlink"
-           viewBox="0 0 ${SVG_W} ${SVG_H}"
-           width="${TEX_W}" height="${TEX_H}">
-        <use href="${SVG_URL}#${cardId}"/>
-      </svg>`;
-    const blob = new Blob([svgSrc], { type: 'image/svg+xml' });
-    const url  = URL.createObjectURL(blob);
-    const img  = new Image();
+    // Find the element with the given id
+    const el = svgDom.getElementById(cardId);
+    if (!el) {
+      resolve(makeFallbackTexture(cardId)); return;
+    }
+
+    // Clone it and wrap in a standalone SVG
+    const clone   = el.cloneNode(true);
+    const svgNS   = 'http://www.w3.org/2000/svg';
+    const wrapper = document.createElementNS(svgNS, 'svg');
+    wrapper.setAttribute('xmlns', svgNS);
+    wrapper.setAttribute('viewBox', `0 0 ${SVG_W} ${SVG_H}`);
+    wrapper.setAttribute('width',  TEX_W);
+    wrapper.setAttribute('height', TEX_H);
+
+    // Copy over any <defs> from the sprite (gradients, patterns etc.)
+    const defs = svgDom.querySelector('defs');
+    if (defs) wrapper.appendChild(defs.cloneNode(true));
+
+    wrapper.appendChild(clone);
+
+    const svgStr = new XMLSerializer().serializeToString(wrapper);
+    const blob   = new Blob([svgStr], { type: 'image/svg+xml' });
+    const url    = URL.createObjectURL(blob);
+    const img    = new Image();
     img.onload = () => {
       const cv  = document.createElement('canvas');
       cv.width  = TEX_W; cv.height = TEX_H;
@@ -97,18 +122,22 @@ function svgCardToTexture(cardId) {
       URL.revokeObjectURL(url);
       resolve(new THREE.CanvasTexture(cv));
     };
-    img.onerror = () => {
-      // Fallback: plain white card
-      const cv = document.createElement('canvas');
-      cv.width = TEX_W; cv.height = TEX_H;
-      const ctx = cv.getContext('2d');
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, TEX_W, TEX_H);
-      ctx.strokeStyle = '#999'; ctx.lineWidth = 4;
-      ctx.strokeRect(4, 4, TEX_W-8, TEX_H-8);
-      resolve(new THREE.CanvasTexture(cv));
-    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(makeFallbackTexture(cardId)); };
     img.src = url;
   });
+}
+
+function makeFallbackTexture(label) {
+  const cv  = document.createElement('canvas');
+  cv.width  = TEX_W; cv.height = TEX_H;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, TEX_W, TEX_H);
+  ctx.strokeStyle = '#999'; ctx.lineWidth = 4;
+  ctx.strokeRect(4, 4, TEX_W-8, TEX_H-8);
+  ctx.fillStyle = '#c00'; ctx.font = '20px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, TEX_W/2, TEX_H/2);
+  return new THREE.CanvasTexture(cv);
 }
 
 // ─── Fisher-Yates shuffle ────────────────────────────────────
@@ -368,9 +397,8 @@ document.addEventListener('gesturechange', e => e.preventDefault());
 let cardTextures = {}; // id → CanvasTexture
 
 async function loadAllTextures() {
-  // Load back texture
+  await loadSvgSprite();
   const backTex = await svgCardToTexture('alternate-back');
-  // Load all 52 front textures in parallel
   const entries = await Promise.all(
     CARD_IDS.map(id => svgCardToTexture(id).then(tex => [id, tex]))
   );
