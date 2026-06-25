@@ -138,10 +138,7 @@ function svgCardToTexture(cardId) {
       const cv  = document.createElement('canvas');
       cv.width  = TEX_W; cv.height = TEX_H;
       const ctx = cv.getContext('2d');
-      ctx.save();
-      clipRoundedRect(ctx, TEX_W, TEX_H, CARD_R);
       ctx.drawImage(img, 0, 0, TEX_W, TEX_H);
-      ctx.restore();
       URL.revokeObjectURL(url);
       const tex = new THREE.CanvasTexture(cv);
       resolve(tex);
@@ -191,7 +188,7 @@ controls.dampingFactor = 0.05;
 controls.minDistance   = 2;
 controls.maxDistance   = 20;
 controls.maxPolarAngle = Math.PI / 2 - 0.05;
-camera.position.set(-4, 4, 1);
+camera.position.set(-4, 4, -1);
 
 // ─── Lighting ───────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xfff8f0, 0.7));
@@ -219,22 +216,69 @@ scene.add(ground);
 const CARD_W = 0.63, CARD_H = 0.88, CARD_T = 0.004;
 const CARD_R = 0.03; // corner radius (world units)
 
-// Apply rounded-corner clip to a canvas context before drawing texture
-function clipRoundedRect(ctx, w, h, r) {
-  const rPx = r * (w / CARD_W); // convert world radius to pixel radius
-  ctx.beginPath();
-  ctx.moveTo(rPx, 0);
-  ctx.lineTo(w - rPx, 0);
-  ctx.quadraticCurveTo(w, 0, w, rPx);
-  ctx.lineTo(w, h - rPx);
-  ctx.quadraticCurveTo(w, h, w - rPx, h);
-  ctx.lineTo(rPx, h);
-  ctx.quadraticCurveTo(0, h, 0, h - rPx);
-  ctx.lineTo(0, rPx);
-  ctx.quadraticCurveTo(0, 0, rPx, 0);
-  ctx.closePath();
-  ctx.clip();
+function makeRoundedShape() {
+  const w = CARD_W, h = CARD_H, r = CARD_R;
+  const shape = new THREE.Shape();
+  shape.moveTo(-w/2 + r, -h/2);
+  shape.lineTo( w/2 - r, -h/2);
+  shape.quadraticCurveTo( w/2, -h/2,  w/2, -h/2 + r);
+  shape.lineTo( w/2,  h/2 - r);
+  shape.quadraticCurveTo( w/2,  h/2,  w/2 - r,  h/2);
+  shape.lineTo(-w/2 + r,  h/2);
+  shape.quadraticCurveTo(-w/2,  h/2, -w/2,  h/2 - r);
+  shape.lineTo(-w/2, -h/2 + r);
+  shape.quadraticCurveTo(-w/2, -h/2, -w/2 + r, -h/2);
+  return shape;
 }
+
+// Remap ShapeGeometry UVs from shape coords to [0,1]
+function fixShapeUVs(geo) {
+  const pos = geo.attributes.position;
+  const uvs = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    uvs[i * 2]     = (pos.getX(i) + CARD_W / 2) / CARD_W;
+    uvs[i * 2 + 1] = (pos.getY(i) + CARD_H / 2) / CARD_H;
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+}
+
+const edgeMat        = new THREE.MeshStandardMaterial({ color: 0xfaf0f0, roughness: 0.5 });
+const transparentMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+
+// ─── Create a card mesh with given front/back textures ───────
+function createCard(frontTex, backTex) {
+  const group = new THREE.Group();
+  const shape = makeRoundedShape();
+
+  // Front face at +Z/2
+  const frontGeo = new THREE.ShapeGeometry(shape);
+  fixShapeUVs(frontGeo);
+  const frontMesh = new THREE.Mesh(frontGeo,
+    new THREE.MeshBasicMaterial({ map: frontTex }));
+  frontMesh.position.z = CARD_T / 2;
+  group.add(frontMesh);
+
+  // Back face at -Z/2, flipped around Y
+  const backGeo = new THREE.ShapeGeometry(shape);
+  fixShapeUVs(backGeo);
+  const backMesh = new THREE.Mesh(backGeo,
+    new THREE.MeshBasicMaterial({ map: backTex }));
+  backMesh.position.z = -CARD_T / 2;
+  backMesh.rotation.y = Math.PI;
+  group.add(backMesh);
+
+  // Side edge: slightly thinner to avoid z-fighting with face meshes
+  const sideT = CARD_T - 0.0002;
+  const extGeo = new THREE.ExtrudeGeometry(shape, { depth: sideT, bevelEnabled: false });
+  const sideMesh = new THREE.Mesh(extGeo, [edgeMat, transparentMat]);
+  sideMesh.position.z = -sideT / 2;
+  group.add(sideMesh);
+
+  group.castShadow    = true;
+  group.receiveShadow = true;
+  return group;
+}
+
 const lean   = 69 * Math.PI / 180;
 const sinL   = Math.sin(lean), cosL = Math.cos(lean);
 const LEAN_X_HALF   = CARD_H * cosL / 2;
@@ -244,20 +288,6 @@ const COL_SPACING_Z  = CARD_W;
 const FLAT_SPACING_X = CARD_W;
 const FLAT_SPACING_Z = CARD_H;
 
-// ─── Create a card mesh with given front/back textures ───────
-const edgeMat = new THREE.MeshStandardMaterial({ color: 0xfaf0f0, roughness: 0.6 });
-
-function createCard(frontTex, backTex) {
-  const geo  = new THREE.BoxGeometry(CARD_W, CARD_H, CARD_T);
-  const mats = [
-    edgeMat, edgeMat, edgeMat, edgeMat,
-    new THREE.MeshBasicMaterial({ map: backTex,  transparent: true }),
-    new THREE.MeshBasicMaterial({ map: frontTex, transparent: true }),
-  ];
-  const mesh = new THREE.Mesh(geo, mats);
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  return mesh;
-}
 
 // ─── Build target positions ──────────────────────────────────
 const targets = [];
@@ -269,6 +299,7 @@ function leanTarget(x, y, z, tiltSign) {
     rotX: tiltSign * (Math.PI / 2 - lean),
   });
 }
+
 function flatTarget(x, y, z) {
   targets.push({
     pos: new THREE.Vector3(x, y, z),
@@ -315,7 +346,7 @@ const apexY3 = base3  + APEX_Y_OFFSET; const flatY3 = apexY3 + CARD_T/2;
 collectLeanLayer(base3,  2, 1, 0, 0); collectFlatLayer(flatY3, 2, 1, 0, 0);
 
 const houseTopY = apexY3;
-controls.target.set(-4, houseTopY * 2, -4);
+controls.target.set(-4, houseTopY * 2, 4);
 controls.update();
 
 // ─── Animation state ─────────────────────────────────────────
@@ -324,7 +355,7 @@ const DELAY_BETWEEN   = 0.3;
 let animating = false, cardsDone = 0;
 let queue = [], clock = new THREE.Clock(false), globalTime = 0;
 const counter = document.getElementById('counter');
-const DECK_POS = new THREE.Vector3(5, 0, -5);
+const DECK_POS = new THREE.Vector3(5, 0, 5);
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
@@ -347,9 +378,8 @@ function resetScene() {
   const order = shuffle(CARD_IDS);
   for (let i = 0; i < 52; i++) {
     const card = cards[i];
-    // Swap front texture to reshuffled card
-    const newFrontTex = cardTextures[order[i]];
-    card.material[5] = new THREE.MeshStandardMaterial({ map: newFrontTex, roughness: 0.5 });
+    // Swap front texture (children[0] = frontMesh)
+    card.children[0].material = new THREE.MeshBasicMaterial({ map: cardTextures[order[i]] });
     card.position.copy(DECK_POS).add(new THREE.Vector3(0, (51 - i) * CARD_T, 0));
     card.rotation.set(-Math.PI/2, 0, 0);
     card.visible = true;
