@@ -87,17 +87,10 @@ async function loadSvgSprite() {
 }
 
 async function loadFontBase64() {
-  // Fetch Noticia Text Regular woff2 from Google Fonts API
-  // First get the CSS to find the actual font file URL
   try {
-    const cssRes  = await fetch('https://fonts.googleapis.com/css2?family=Noticia+Text&display=swap');
-    const cssText = await cssRes.text();
-    // Extract woff2 URL
-    const match = cssText.match(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+\.woff2)\)/);
-    if (!match) return;
-    const fontRes  = await fetch(match[1]);
-    const fontBuf  = await fontRes.arrayBuffer();
-    const bytes    = new Uint8Array(fontBuf);
+    const fontRes = await fetch('NoticiaText-Regular.woff2');
+    const fontBuf = await fontRes.arrayBuffer();
+    const bytes   = new Uint8Array(fontBuf);
     let binary = '';
     for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
     fontBase64 = btoa(binary);
