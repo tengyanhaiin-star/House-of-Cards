@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>House of Cards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noticia+Text:wght@400;700&family=Courier+Prime&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    background: #f5f0e8; overflow: hidden;
+    width: 100%; height: 100%;
+    position: fixed;
+    touch-action: none;
+  }
+  canvas { display: block; touch-action: none; }
+  #ui {
+    position: fixed;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    left: 50%; transform: translateX(-50%);
+    display: flex; gap: 12px; z-index: 10;
+  }
+  #ui button {
+    padding: 10px 26px; border: none; border-radius: 20px;
+    background: rgba(180,60,40,0.85); color: #fff;
+    font-family: 'Noticia Text', serif;
+    font-size: 20px; font-weight: 400; cursor: pointer; letter-spacing: 1px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    transition: background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #ui button:hover { background: rgba(200,30,20,0.95); }
+  #counter {
+    position: fixed;
+    top: calc(18px + env(safe-area-inset-top));
+    right: calc(24px + env(safe-area-inset-right));
+    color: #a04030; font-size: 20px; font-weight: 400;
+    font-family: 'Courier Prime', monospace;
+    letter-spacing: 1px;
+  }
+  #loading {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #f5f0e8;
+    font-family: 'Courier Prime', monospace;
+    font-size: 18px; color: #a04030;
+    z-index: 100;
+  }
+</style>
+</head>
+<body>
+<div id="loading">Loading cards…</div>
+<div id="ui" style="display:none">
+  <button id="btnPlay">▶ Build</button>
+  <button id="btnReset">↺ Reset</button>
+</div>
+<div id="counter" style="display:none">0/52</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// ─── SVG Cards sprite URL ────────────────────────────────────
+const SVG_URL = 'svg-cards.svg';
+// Natural card size in the SVG
+const SVG_W = 169.075, SVG_H = 244.640;
+
+// 52 card IDs (no jokers)
+const SUITS  = ['club', 'diamond', 'heart', 'spade'];
+const RANKS  = ['1','2','3','4','5','6','7','8','9','10','jack','queen','king'];
+const CARD_IDS = [];
+for (const suit of SUITS) for (const rank of RANKS) CARD_IDS.push(`${suit}_${rank}`);
+// CARD_IDS.length === 52
+
+// ─── Render one SVG card id → CanvasTexture ──────────────────
+const TEX_W = 256, TEX_H = Math.round(TEX_W * SVG_H / SVG_W); // ~370px
+
+function svgCardToTexture(cardId) {
+  return new Promise((resolve) => {
+    const svgSrc = `
+      <svg xmlns="http://www.w3.org/2000/svg"
+           xmlns:xlink="http://www.w3.org/1999/xlink"
+           viewBox="0 0 ${SVG_W} ${SVG_H}"
+           width="${TEX_W}" height="${TEX_H}">
+        <use href="${SVG_URL}#${cardId}"/>
+      </svg>`;
+    const blob = new Blob([svgSrc], { type: 'image/svg+xml' });
+    const url  = URL.createObjectURL(blob);
+    const img  = new Image();
+    img.onload = () => {
+      const cv  = document.createElement('canvas');
+      cv.width  = TEX_W; cv.height = TEX_H;
+      cv.getContext('2d').drawImage(img, 0, 0, TEX_W, TEX_H);
+      URL.revokeObjectURL(url);
+      resolve(new THREE.CanvasTexture(cv));
+    };
+    img.onerror = () => {
+      // Fallback: plain white card
+      const cv = document.createElement('canvas');
+      cv.width = TEX_W; cv.height = TEX_H;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, TEX_W, TEX_H);
+      ctx.strokeStyle = '#999'; ctx.lineWidth = 4;
+      ctx.strokeRect(4, 4, TEX_W-8, TEX_H-8);
+      resolve(new THREE.CanvasTexture(cv));
+    };
+    img.src = url;
+  });
+}
+
+// ─── Fisher-Yates shuffle ────────────────────────────────────
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ─── Renderer ───────────────────────────────────────────────
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 200);
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0xf5f0e8);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance   = 5;
+controls.maxDistance   = 20;
+controls.maxPolarAngle = Math.PI / 2 - 0.05;
+camera.position.set(-4, 4, 1);
+
+// ─── Lighting ───────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0xfff8f0, 0.7));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+dirLight.position.set(4, 10, 6);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(2048, 2048);
+dirLight.shadow.camera.left = -8; dirLight.shadow.camera.right = 8;
+dirLight.shadow.camera.top  = 10; dirLight.shadow.camera.bottom = -3;
+dirLight.shadow.bias = -0.001;
+scene.add(dirLight);
+scene.add(new THREE.DirectionalLight(0xffd0b0, 0.3)).position.set(-4, 4, -3);
+
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(40, 40),
+  new THREE.MeshStandardMaterial({ color: 0xf5f0e8, roughness: 0.9 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.position.y = -0.01;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ─── Card geometry constants ─────────────────────────────────
+const CARD_W = 0.63, CARD_H = 0.88, CARD_T = 0.008;
+const lean   = 69 * Math.PI / 180;
+const sinL   = Math.sin(lean), cosL = Math.cos(lean);
+const LEAN_X_HALF   = CARD_H * cosL / 2;
+const LEAN_CY_HALF  = CARD_H * sinL / 2;
+const APEX_Y_OFFSET = CARD_H * sinL;
+const COL_SPACING_Z  = CARD_W;
+const FLAT_SPACING_X = CARD_W;
+const FLAT_SPACING_Z = CARD_H;
+
+// ─── Create a card mesh with given front/back textures ───────
+const edgeMat = new THREE.MeshStandardMaterial({ color: 0xfaf0f0, roughness: 0.6 });
+
+function createCard(frontTex, backTex) {
+  const geo  = new THREE.BoxGeometry(CARD_W, CARD_H, CARD_T);
+  const mats = [
+    edgeMat, edgeMat, edgeMat, edgeMat,
+    new THREE.MeshStandardMaterial({ map: backTex,  roughness: 0.5 }),
+    new THREE.MeshStandardMaterial({ map: frontTex, roughness: 0.5 }),
+  ];
+  const mesh = new THREE.Mesh(geo, mats);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  return mesh;
+}
+
+// ─── Build target positions ──────────────────────────────────
+const targets = [];
+
+function leanTarget(x, y, z, tiltSign) {
+  targets.push({
+    pos: new THREE.Vector3(x, y, z),
+    rotOrder: 'YXZ', rotY: Math.PI / 2,
+    rotX: tiltSign * (Math.PI / 2 - lean),
+  });
+}
+function flatTarget(x, y, z) {
+  targets.push({
+    pos: new THREE.Vector3(x, y, z),
+    rotOrder: 'XYZ', rotY: 0, rotX: Math.PI / 2,
+  });
+}
+
+function collectLeanLayer(baseY, nTents, nCols, centerX, centerZ) {
+  const cy     = baseY + LEAN_CY_HALF;
+  const totalZ = (nCols  - 1) * COL_SPACING_Z;
+  const totalX = (nTents - 1) * FLAT_SPACING_X;
+  for (let col = 0; col < nCols; col++) {
+    const z = centerZ - totalZ/2 + col * COL_SPACING_Z;
+    for (let t = 0; t < nTents; t++) {
+      const cx = centerX - totalX/2 + t * FLAT_SPACING_X;
+      leanTarget(cx - LEAN_X_HALF, cy, z, +1);
+      leanTarget(cx + LEAN_X_HALF, cy, z, -1);
+    }
+  }
+}
+function collectFlatLayer(flatY, nFlatX, nFlatZ, centerX, centerZ) {
+  const totalX = (nFlatX - 1) * FLAT_SPACING_X;
+  const totalZ = (nFlatZ - 1) * FLAT_SPACING_Z;
+  for (let ix = 0; ix < nFlatX; ix++) {
+    const x = centerX - totalX/2 + ix * FLAT_SPACING_X;
+    for (let iz = 0; iz < nFlatZ; iz++) {
+      const z = centerZ - totalZ/2 + iz * FLAT_SPACING_Z;
+      flatTarget(x, flatY, z);
+    }
+  }
+}
+
+// Layer 1
+const base1  = 0;
+const apexY1 = base1  + APEX_Y_OFFSET; const flatY1 = apexY1 + CARD_T/2;
+collectLeanLayer(base1,  4, 3, 0, 0); collectFlatLayer(flatY1, 3, 2, 0, 0);
+// Layer 2
+const base2  = flatY1 + CARD_T/2;
+const apexY2 = base2  + APEX_Y_OFFSET; const flatY2 = apexY2 + CARD_T/2;
+collectLeanLayer(base2,  3, 2, 0, 0); collectFlatLayer(flatY2, 2, 2, 0, 0);
+// Layer 3
+const base3  = flatY2 + CARD_T/2;
+const apexY3 = base3  + APEX_Y_OFFSET; const flatY3 = apexY3 + CARD_T/2;
+collectLeanLayer(base3,  2, 1, 0, 0); collectFlatLayer(flatY3, 2, 1, 0, 0);
+
+const houseTopY = apexY3;
+controls.target.set(-4, houseTopY * 2, -4);
+controls.update();
+
+// ─── Animation state ─────────────────────────────────────────
+const FLIGHT_DURATION = 1.1;
+const DELAY_BETWEEN   = 0.3;
+let animating = false, cardsDone = 0;
+let queue = [], clock = new THREE.Clock(false), globalTime = 0;
+const counter = document.getElementById('counter');
+const DECK_POS = new THREE.Vector3(5, 0, -5);
+
+function easeInOutCubic(t) {
+  return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+}
+function targetQuat(tgt) {
+  const q = new THREE.Quaternion();
+  q.setFromEuler(new THREE.Euler(tgt.rotX, tgt.rotY, 0, tgt.rotOrder));
+  return q;
+}
+const deckQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI/2, 0, 0));
+
+// ─── Cards array (populated after textures load) ─────────────
+let cards = [];
+
+function resetScene() {
+  animating = false; cardsDone = 0;
+  clock.stop(); globalTime = 0;
+  counter.textContent = '0/52';
+  // Reshuffle
+  const order = shuffle(CARD_IDS);
+  for (let i = 0; i < 52; i++) {
+    const card = cards[i];
+    // Swap front texture to reshuffled card
+    const newFrontTex = cardTextures[order[i]];
+    card.material[5] = new THREE.MeshStandardMaterial({ map: newFrontTex, roughness: 0.5 });
+    card.position.copy(DECK_POS).add(new THREE.Vector3(0, (51 - i) * CARD_T, 0));
+    card.rotation.set(-Math.PI/2, 0, 0);
+    card.visible = true;
+  }
+}
+
+function scheduleAll() {
+  queue = [];
+  for (let i = 0; i < 52; i++) {
+    queue.push({
+      card: cards[i], target: targets[i],
+      startTime: i * DELAY_BETWEEN,
+      launched: false, done: false,
+      startPos: null, startQuat: null,
+      endQuat: targetQuat(targets[i]),
+    });
+  }
+}
+
+function startAnimation() {
+  resetScene();
+  scheduleAll();
+  animating = true;
+  clock.start();
+}
+
+document.getElementById('btnPlay').addEventListener('click', startAnimation);
+document.getElementById('btnReset').addEventListener('click', resetScene);
+
+// ─── Render loop ─────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+
+  if (animating) {
+    globalTime += clock.getDelta();
+    let allDone = true;
+    for (const item of queue) {
+      if (item.done) continue;
+      allDone = false;
+      if (globalTime < item.startTime) continue;
+      if (!item.launched) {
+        item.launched  = true;
+        item.startPos  = item.card.position.clone();
+        item.startQuat = deckQuat.clone();
+      }
+      const elapsed = globalTime - item.startTime;
+      const t  = Math.min(elapsed / FLIGHT_DURATION, 1);
+      const te = easeInOutCubic(t);
+      const start = item.startPos, end = item.target.pos;
+      const midX = (start.x + end.x) / 2, midZ = (start.z + end.z) / 2;
+      const arcH = Math.max(2.5, start.distanceTo(end) * 0.6);
+      const midY = Math.max(start.y, end.y) + arcH;
+      const s = te;
+      item.card.position.set(
+        (1-s)*(1-s)*start.x + 2*(1-s)*s*midX + s*s*end.x,
+        (1-s)*(1-s)*start.y + 2*(1-s)*s*midY + s*s*end.y,
+        (1-s)*(1-s)*start.z + 2*(1-s)*s*midZ + s*s*end.z,
+      );
+      const q = new THREE.Quaternion();
+      q.slerpQuaternions(item.startQuat, item.endQuat, te);
+      item.card.setRotationFromQuaternion(q);
+      if (t >= 1) {
+        item.done = true;
+        item.card.position.copy(end);
+        item.card.setRotationFromQuaternion(item.endQuat);
+        cardsDone++;
+        counter.textContent = `${cardsDone}/52`;
+      }
+    }
+    if (allDone) { animating = false; clock.stop(); }
+  }
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+});
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('gesturechange', e => e.preventDefault());
+
+// ─── Load all textures then init ─────────────────────────────
+let cardTextures = {}; // id → CanvasTexture
+
+async function loadAllTextures() {
+  // Load back texture
+  const backTex = await svgCardToTexture('alternate-back');
+  // Load all 52 front textures in parallel
+  const entries = await Promise.all(
+    CARD_IDS.map(id => svgCardToTexture(id).then(tex => [id, tex]))
+  );
+  entries.forEach(([id, tex]) => { cardTextures[id] = tex; });
+  return backTex;
+}
+
+async function init() {
+  await document.fonts.ready;
+  const backTex   = await loadAllTextures();
+  const order     = shuffle(CARD_IDS);
+
+  // Create 52 cards
+  for (let i = 0; i < 52; i++) {
+    const frontTex = cardTextures[order[i]];
+    const card     = createCard(frontTex, backTex);
+    card.position.copy(DECK_POS).add(new THREE.Vector3(0, (51 - i) * CARD_T, 0));
+    card.rotation.x = -Math.PI / 2;
+    scene.add(card);
+    cards.push(card);
+  }
+
+  // Hide loading, show UI
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('ui').style.display      = 'flex';
+  document.getElementById('counter').style.display = 'block';
+
+  animate();
+}
+
+init();
+</script>
+</body>
+</html>
