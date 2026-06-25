@@ -46,8 +46,8 @@
     position: fixed; inset: 0;
     display: flex; align-items: center; justify-content: center;
     background: #f5f0e8;
-    font-family: 'Courier Prime', monospace;
-    font-size: 18px; color: #a04030;
+    font-family: 'Noticia Text', serif;
+    font-size: 20px; font-weight: 400; color: #a04030;
     z-index: 100;
   }
 </style>
@@ -228,8 +228,8 @@ function createCard(frontTex, backTex) {
   const geo  = new THREE.BoxGeometry(CARD_W, CARD_H, CARD_T);
   const mats = [
     edgeMat, edgeMat, edgeMat, edgeMat,
-    new THREE.MeshStandardMaterial({ map: backTex,  roughness: 0.5 }),
-    new THREE.MeshStandardMaterial({ map: frontTex, roughness: 0.5 }),
+    new THREE.MeshBasicMaterial({ map: backTex }),
+    new THREE.MeshBasicMaterial({ map: frontTex }),
   ];
   const mesh = new THREE.Mesh(geo, mats);
   mesh.castShadow = true; mesh.receiveShadow = true;
