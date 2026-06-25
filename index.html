@@ -188,7 +188,7 @@ controls.dampingFactor = 0.05;
 controls.minDistance   = 2;
 controls.maxDistance   = 20;
 controls.maxPolarAngle = Math.PI / 2 - 0.05;
-camera.position.set(-4, 4, -6);
+camera.position.set(-4, 4, -8);
 
 // ─── Lighting ───────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xfff8f0, 0.7));
@@ -346,7 +346,7 @@ const apexY3 = base3  + APEX_Y_OFFSET; const flatY3 = apexY3 + CARD_T/2;
 collectLeanLayer(base3,  2, 1, 0, 0); collectFlatLayer(flatY3, 2, 1, 0, 0);
 
 const houseTopY = apexY3;
-controls.target.set(-4, houseTopY * 2, 0);
+controls.target.set(-4, houseTopY * 2, -6);
 controls.update();
 
 // ─── Animation state ─────────────────────────────────────────
