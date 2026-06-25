@@ -174,7 +174,7 @@ function shuffle(arr) {
 // ─── Renderer ───────────────────────────────────────────────
 const scene    = new THREE.Scene();
 const camera   = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 200);
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.setClearColor(0xf5f0e8);
@@ -188,7 +188,7 @@ controls.dampingFactor = 0.05;
 controls.minDistance   = 2;
 controls.maxDistance   = 20;
 controls.maxPolarAngle = Math.PI / 2 - 0.05;
-camera.position.set(-4, 4, -1);
+camera.position.set(-4, 4, -5);
 
 // ─── Lighting ───────────────────────────────────────────────
 scene.add(new THREE.AmbientLight(0xfff8f0, 0.7));
@@ -254,7 +254,7 @@ function createCard(frontTex, backTex) {
   const frontGeo = new THREE.ShapeGeometry(shape);
   fixShapeUVs(frontGeo);
   const frontMesh = new THREE.Mesh(frontGeo,
-    new THREE.MeshBasicMaterial({ map: frontTex }));
+    new THREE.MeshBasicMaterial({ map: backTex }));
   frontMesh.position.z = CARD_T / 2;
   group.add(frontMesh);
 
@@ -262,13 +262,13 @@ function createCard(frontTex, backTex) {
   const backGeo = new THREE.ShapeGeometry(shape);
   fixShapeUVs(backGeo);
   const backMesh = new THREE.Mesh(backGeo,
-    new THREE.MeshBasicMaterial({ map: backTex }));
+    new THREE.MeshBasicMaterial({ map: frontTex }));
   backMesh.position.z = -CARD_T / 2;
   backMesh.rotation.y = Math.PI;
   group.add(backMesh);
 
   // Side edge: slightly thinner to avoid z-fighting with face meshes
-  const sideT = CARD_T - 0.0002;
+  const sideT = CARD_T - 0.0004;
   const extGeo = new THREE.ExtrudeGeometry(shape, { depth: sideT, bevelEnabled: false });
   const sideMesh = new THREE.Mesh(extGeo, [edgeMat, transparentMat]);
   sideMesh.position.z = -sideT / 2;
@@ -346,7 +346,7 @@ const apexY3 = base3  + APEX_Y_OFFSET; const flatY3 = apexY3 + CARD_T/2;
 collectLeanLayer(base3,  2, 1, 0, 0); collectFlatLayer(flatY3, 2, 1, 0, 0);
 
 const houseTopY = apexY3;
-controls.target.set(-4, houseTopY * 2, 4);
+controls.target.set(-4, houseTopY * 2, -4);
 controls.update();
 
 // ─── Animation state ─────────────────────────────────────────
@@ -378,8 +378,8 @@ function resetScene() {
   const order = shuffle(CARD_IDS);
   for (let i = 0; i < 52; i++) {
     const card = cards[i];
-    // Swap front texture (children[0] = frontMesh)
-    card.children[0].material = new THREE.MeshBasicMaterial({ map: cardTextures[order[i]] });
+    // Swap front texture (children[1] = backMesh which shows frontTex)
+    card.children[1].material = new THREE.MeshBasicMaterial({ map: cardTextures[order[i]] });
     card.position.copy(DECK_POS).add(new THREE.Vector3(0, (51 - i) * CARD_T, 0));
     card.rotation.set(-Math.PI/2, 0, 0);
     card.visible = true;
