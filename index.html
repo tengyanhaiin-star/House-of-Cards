@@ -78,11 +78,32 @@ for (const suit of SUITS) for (const rank of RANKS) CARD_IDS.push(`${suit}_${ran
 // ─── SVG sprite DOM (loaded once) ───────────────────────────
 const TEX_W = 256, TEX_H = Math.round(TEX_W * SVG_H / SVG_W);
 let svgDom = null;
+let fontBase64 = null; // Noticia Text Regular as base64
 
 async function loadSvgSprite() {
   const res  = await fetch(SVG_URL);
   const text = await res.text();
   svgDom = new DOMParser().parseFromString(text, 'image/svg+xml');
+}
+
+async function loadFontBase64() {
+  // Fetch Noticia Text Regular woff2 from Google Fonts API
+  // First get the CSS to find the actual font file URL
+  try {
+    const cssRes  = await fetch('https://fonts.googleapis.com/css2?family=Noticia+Text&display=swap');
+    const cssText = await cssRes.text();
+    // Extract woff2 URL
+    const match = cssText.match(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+\.woff2)\)/);
+    if (!match) return;
+    const fontRes  = await fetch(match[1]);
+    const fontBuf  = await fontRes.arrayBuffer();
+    const bytes    = new Uint8Array(fontBuf);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    fontBase64 = btoa(binary);
+  } catch(e) {
+    console.warn('Font load failed:', e);
+  }
 }
 
 // Inline the card's subtree into a self-contained SVG string,
@@ -97,13 +118,23 @@ function svgCardToTexture(cardId) {
     const defsStr = defsEl ? new XMLSerializer().serializeToString(defsEl) : '';
     const elStr   = new XMLSerializer().serializeToString(el);
 
+    // Inject font as base64 @font-face if available
+    const fontStyle = fontBase64 ? `<style>
+      @font-face {
+        font-family: 'Noticia Text';
+        font-style: normal;
+        font-weight: 400;
+        src: url('data:font/woff2;base64,${fontBase64}') format('woff2');
+      }
+    </style>` : '';
+
     const fillAttr = cardId === 'back' ? 'color="#1a56db" fill="#1a56db"' : '';
 
     const svgStr = `<svg xmlns="http://www.w3.org/2000/svg"
       xmlns:xlink="http://www.w3.org/1999/xlink"
       viewBox="0 0 ${SVG_W} ${SVG_H}"
       width="${TEX_W}" height="${TEX_H}" ${fillAttr}>
-      ${defsStr}${elStr}
+      ${fontStyle}${defsStr}${elStr}
     </svg>`;
 
     const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
@@ -391,7 +422,7 @@ document.addEventListener('gesturechange', e => e.preventDefault());
 let cardTextures = {}; // id → CanvasTexture
 
 async function loadAllTextures() {
-  await loadSvgSprite();
+  await Promise.all([loadSvgSprite(), loadFontBase64()]);
   const backTex = await svgCardToTexture('back');
   const entries = await Promise.all(
     CARD_IDS.map(id => svgCardToTexture(id).then(tex => [id, tex]))
