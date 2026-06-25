@@ -253,7 +253,7 @@ function createCard(frontTex, backTex) {
   const mats = [
     new THREE.MeshBasicMaterial({ map: frontTex }),
     edgeMat,
-    new THREE.MeshBasicMaterial({ map: backTex }),
+    //new THREE.MeshBasicMaterial({ map: backTex }),
   ];
   const mesh = new THREE.Mesh(geo, mats);
   // Shift geometry so card is centred on Z axis (extrude goes 0→CARD_T)
