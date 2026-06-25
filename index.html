@@ -82,7 +82,11 @@ let fontBase64 = null; // Noticia Text Regular as base64
 
 async function loadSvgSprite() {
   const res  = await fetch(SVG_URL);
-  const text = await res.text();
+  let text   = await res.text();
+  // Replace ${fontBase64} placeholder after font is loaded
+  if (fontBase64) {
+    text = text.replace(/\$\{fontBase64\}/g, fontBase64);
+  }
   svgDom = new DOMParser().parseFromString(text, 'image/svg+xml');
 }
 
@@ -118,24 +122,13 @@ function svgCardToTexture(cardId) {
     const elStr = new XMLSerializer().serializeToString(el)
       .replace(/font-family="[^"]*"/g, 'font-family="Noticia Text"');
 
-    // Inject font as base64 @font-face if available
-    const fontStyle = fontBase64 ? `<style>
-      @font-face {
-        font-family: 'Noticia Text';
-        font-style: normal;
-        font-weight: 400;
-        src: url('data:font/woff2;base64,${fontBase64}') format('woff2');
-      }
-      text, tspan { font-family: 'Noticia Text', serif !important; }
-    </style>` : '';
-
     const fillAttr = cardId === 'back' ? 'color="#1a56db" fill="#1a56db"' : '';
 
     const svgStr = `<svg xmlns="http://www.w3.org/2000/svg"
       xmlns:xlink="http://www.w3.org/1999/xlink"
       viewBox="0 0 ${SVG_W} ${SVG_H}"
       width="${TEX_W}" height="${TEX_H}" ${fillAttr}>
-      ${fontStyle}${defsStr}${elStr}
+      ${defsStr}${elStr}
     </svg>`;
 
     const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
@@ -423,7 +416,8 @@ document.addEventListener('gesturechange', e => e.preventDefault());
 let cardTextures = {}; // id → CanvasTexture
 
 async function loadAllTextures() {
-  await Promise.all([loadSvgSprite(), loadFontBase64()]);
+  await loadFontBase64();   // font must load first
+  await loadSvgSprite();    // then sprite (uses fontBase64 to replace placeholder)
   const backTex = await svgCardToTexture('back');
   const entries = await Promise.all(
     CARD_IDS.map(id => svgCardToTexture(id).then(tex => [id, tex]))
