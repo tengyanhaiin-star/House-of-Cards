@@ -257,7 +257,7 @@ function createCard(frontTex, backTex) {
   ];
   const mesh = new THREE.Mesh(geo, mats);
   // Shift geometry so card is centred on Z axis (extrude goes 0→CARD_T)
-  //mesh.geometry.translate(0, 0, -CARD_T / 2);
+  mesh.geometry.translate(-CARD_W / 2, -CARD_H / 2, -CARD_T / 2);
   mesh.castShadow = true; mesh.receiveShadow = true;
   return mesh;
 }
