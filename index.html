@@ -32,7 +32,7 @@
   #progressBar {
     flex: 1; height: 4px; -webkit-appearance: none; appearance: none;
     background: rgba(180,60,40,0.25); border-radius: 2px; cursor: pointer;
-    outline: none;
+    outline: none; touch-action: none;
   }
   #progressBar::-webkit-slider-thumb {
     -webkit-appearance: none; appearance: none;
@@ -89,7 +89,7 @@
   </div>
   <div id="btnRow">
     <button id="btnPlayPause">▶ Play</button>
-    <button id="btnReset">↺ Reset</button>
+    <button id="btnReset">↻ Reset</button>
   </div>
 </div>
 <div id="counter" style="display:none">0/52</div>
@@ -511,21 +511,30 @@ function togglePlayPause() {
 btnPlayPause.addEventListener('click', togglePlayPause);
 document.getElementById('btnReset').addEventListener('click', resetScene);
 
-// Progress bar: only snap to integer steps on pointerup/touchend
+// Progress bar events — handles mouse, keyboard and iOS touch
 let scrubbing = false;
-progressBar.addEventListener('pointerdown', () => { scrubbing = true; playing = false; pausing = false; clock.stop(); inFlight = null; updateUI(); });
-progressBar.addEventListener('input', () => {
-  if (!scrubbing) return;
-  const pct = (parseInt(progressBar.value) / 52 * 100).toFixed(1);
-  progressBar.style.setProperty('--prog', pct + '%');
+
+progressBar.addEventListener('pointerdown', () => {
+  scrubbing = true;
+  playing = false; pausing = false;
+  clock.stop(); inFlight = null;
+  updateUI();
 });
+
+progressBar.addEventListener('input', () => {
+  const n = parseInt(progressBar.value);
+  const pct = (n / 52 * 100).toFixed(1);
+  progressBar.style.setProperty('--prog', pct + '%');
+  snapToStep(n);
+});
+
 progressBar.addEventListener('pointerup', () => {
   scrubbing = false;
   snapToStep(parseInt(progressBar.value));
 });
-progressBar.addEventListener('touchend', () => {
+
+progressBar.addEventListener('pointercancel', () => {
   scrubbing = false;
-  snapToStep(parseInt(progressBar.value));
 });
 
 // ─── Render loop ─────────────────────────────────────────────
