@@ -274,7 +274,7 @@ function createCard(frontTex, backTex) {
   const sideT = CARD_T * 0.6;
   const extGeo = new THREE.ExtrudeGeometry(shape, { depth: sideT, bevelEnabled: false });
   const sideMesh = new THREE.Mesh(extGeo, [edgeMat, transparentMat]);
-  //sideMesh.position.z = -sideT / 2;
+  sideMesh.position.z = -sideT / 2;
   group.add(sideMesh);
 
   group.castShadow    = true;
