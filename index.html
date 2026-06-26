@@ -258,7 +258,7 @@ function createCard(frontTex, backTex) {
   fixShapeUVs(frontGeo);
   const frontMesh = new THREE.Mesh(frontGeo,
     new THREE.MeshBasicMaterial({ map: backTex }));
-  frontMesh.position.z = CARD_T * 0.4;
+  frontMesh.position.z = CARD_T * 0.5;
   group.add(frontMesh);
 
   // Back face at -Z/2, flipped around Y
@@ -266,14 +266,14 @@ function createCard(frontTex, backTex) {
   fixShapeUVs(backGeo);
   const backMesh = new THREE.Mesh(backGeo,
     new THREE.MeshBasicMaterial({ map: frontTex }));
-  backMesh.position.z = -CARD_T * 0.4;
+  backMesh.position.z = -CARD_T * 0.5;
   backMesh.rotation.y = Math.PI;
   group.add(backMesh);
 
   // Side edge: slightly thinner to avoid z-fighting with face meshes
-  const sideT = CARD_T * 0.6;
+  const sideT = CARD_T;
   const extGeo = new THREE.ExtrudeGeometry(shape, { depth: sideT, bevelEnabled: false });
-  const sideMesh = new THREE.Mesh(extGeo, [transparentMat, transparentMat]);
+  const sideMesh = new THREE.Mesh(extGeo, [edgeMat, transparentMat]);
   sideMesh.position.z = -sideT / 2;
   group.add(sideMesh);
 
@@ -282,7 +282,7 @@ function createCard(frontTex, backTex) {
   return group;
 }
 
-const lean   = 69.5 * Math.PI / 180;
+const lean   = 69.1 * Math.PI / 180;
 const sinL   = Math.sin(lean), cosL = Math.cos(lean);
 const LEAN_X_HALF   = CARD_H * cosL / 2;
 const LEAN_CY_HALF  = CARD_H * sinL / 2;
