@@ -273,7 +273,7 @@ function createCard(frontTex, backTex) {
   // Side edge: slightly thinner to avoid z-fighting with face meshes
   const sideT = CARD_T * 0.6;
   const extGeo = new THREE.ExtrudeGeometry(shape, { depth: sideT, bevelEnabled: false });
-  const sideMesh = new THREE.Mesh(extGeo, [edgeMat, transparentMat]);
+  const sideMesh = new THREE.Mesh(extGeo, [transparentMat, transparentMat]);
   sideMesh.position.z = -sideT / 2;
   group.add(sideMesh);
 
@@ -282,7 +282,7 @@ function createCard(frontTex, backTex) {
   return group;
 }
 
-const lean   = 69 * Math.PI / 180;
+const lean   = 69.5 * Math.PI / 180;
 const sinL   = Math.sin(lean), cosL = Math.cos(lean);
 const LEAN_X_HALF   = CARD_H * cosL / 2;
 const LEAN_CY_HALF  = CARD_H * sinL / 2;
