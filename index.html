@@ -213,7 +213,7 @@ ground.receiveShadow = true;
 scene.add(ground);
 
 // ─── Card geometry constants ─────────────────────────────────
-const CARD_W = 0.63, CARD_H = 0.88, CARD_T = 0.004;
+const CARD_W = 0.63, CARD_H = 0.88, CARD_T = 0.003;
 const CARD_R = 0.03; // corner radius (world units)
 
 function makeRoundedShape() {
@@ -258,7 +258,7 @@ function createCard(frontTex, backTex) {
   fixShapeUVs(frontGeo);
   const frontMesh = new THREE.Mesh(frontGeo,
     new THREE.MeshBasicMaterial({ map: backTex }));
-  frontMesh.position.z = CARD_T / 2;
+  frontMesh.position.z = CARD_T * 0.4;
   group.add(frontMesh);
 
   // Back face at -Z/2, flipped around Y
@@ -266,15 +266,15 @@ function createCard(frontTex, backTex) {
   fixShapeUVs(backGeo);
   const backMesh = new THREE.Mesh(backGeo,
     new THREE.MeshBasicMaterial({ map: frontTex }));
-  backMesh.position.z = -CARD_T / 2;
-  backMesh.rotation.y = Math.PI;
+  backMesh.position.z = -CARD_T * 0.4;
+  //backMesh.rotation.y = Math.PI;
   group.add(backMesh);
 
   // Side edge: slightly thinner to avoid z-fighting with face meshes
-  const sideT = CARD_T - 0.0004;
+  const sideT = CARD_T * 0.6;
   const extGeo = new THREE.ExtrudeGeometry(shape, { depth: sideT, bevelEnabled: false });
   const sideMesh = new THREE.Mesh(extGeo, [edgeMat, transparentMat]);
-  sideMesh.position.z = -sideT / 2;
+  //sideMesh.position.z = -sideT / 2;
   group.add(sideMesh);
 
   group.castShadow    = true;
