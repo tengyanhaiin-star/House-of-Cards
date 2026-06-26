@@ -258,7 +258,7 @@ function createCard(frontTex, backTex) {
   fixShapeUVs(frontGeo);
   const frontMesh = new THREE.Mesh(frontGeo,
     new THREE.MeshBasicMaterial({ map: backTex }));
-  frontMesh.position.z = CARD_T * 0.5;
+  frontMesh.position.z = CARD_T * 0.45;
   group.add(frontMesh);
 
   // Back face at -Z/2, flipped around Y
@@ -266,12 +266,12 @@ function createCard(frontTex, backTex) {
   fixShapeUVs(backGeo);
   const backMesh = new THREE.Mesh(backGeo,
     new THREE.MeshBasicMaterial({ map: frontTex }));
-  backMesh.position.z = -CARD_T * 0.5;
+  backMesh.position.z = -CARD_T * 0.45;
   backMesh.rotation.y = Math.PI;
   group.add(backMesh);
 
   // Side edge: slightly thinner to avoid z-fighting with face meshes
-  const sideT = CARD_T;
+  const sideT = CARD_T*0.85;
   const extGeo = new THREE.ExtrudeGeometry(shape, { depth: sideT, bevelEnabled: false });
   const sideMesh = new THREE.Mesh(extGeo, [edgeMat, transparentMat]);
   sideMesh.position.z = -sideT / 2;
