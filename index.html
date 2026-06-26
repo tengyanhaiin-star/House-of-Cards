@@ -380,6 +380,7 @@ function resetScene() {
     const card = cards[i];
     // Swap front texture (children[1] = backMesh which shows frontTex)
     card.children[1].material = new THREE.MeshBasicMaterial({ map: cardTextures[order[i]] });
+    card.children[2].visible = false; // hide side edge while in deck
     card.position.copy(DECK_POS).add(new THREE.Vector3(0, (51 - i) * CARD_T, 0));
     card.rotation.set(-Math.PI/2, 0, 0);
     card.visible = true;
@@ -446,6 +447,7 @@ function animate() {
         item.done = true;
         item.card.position.copy(end);
         item.card.setRotationFromQuaternion(item.endQuat);
+        item.card.children[2].visible = true; // show side edge on landing
         cardsDone++;
         counter.textContent = `${cardsDone}/52`;
       }
@@ -490,6 +492,7 @@ async function init() {
     const card     = createCard(frontTex, backTex);
     card.position.copy(DECK_POS).add(new THREE.Vector3(0, (51 - i) * CARD_T, 0));
     card.rotation.x = -Math.PI / 2;
+    card.children[2].visible = false; // hide side edge while in deck
     scene.add(card);
     cards.push(card);
   }
