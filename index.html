@@ -20,12 +20,41 @@
   canvas { display: block; touch-action: none; }
   #ui {
     position: fixed;
-    bottom: calc(24px + env(safe-area-inset-bottom));
+    bottom: calc(16px + env(safe-area-inset-bottom));
     left: 50%; transform: translateX(-50%);
-    display: flex; gap: 12px; z-index: 10;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 10px; z-index: 10;
+    width: min(480px, calc(100vw - 48px));
+  }
+  #progressRow {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+  }
+  #progressBar {
+    flex: 1; height: 4px; -webkit-appearance: none; appearance: none;
+    background: rgba(180,60,40,0.25); border-radius: 2px; cursor: pointer;
+    outline: none;
+  }
+  #progressBar::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: rgba(180,60,40,0.85);
+    cursor: pointer; margin-top: 0;
+  }
+  #progressBar::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: rgba(180,60,40,0.85); border: none; cursor: pointer;
+  }
+  #progressBar::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right,
+      rgba(180,60,40,0.85) var(--prog, 0%),
+      rgba(180,60,40,0.25) var(--prog, 0%));
+  }
+  #btnRow {
+    display: flex; gap: 12px;
   }
   #ui button {
-    padding: 10px 26px; border: none; border-radius: 20px;
+    padding: 8px 24px; border: none; border-radius: 20px;
     background: rgba(180,60,40,0.85); color: #fff;
     font-family: 'Noticia Text', serif;
     font-size: 20px; font-weight: 400; cursor: pointer; letter-spacing: 1px;
@@ -55,8 +84,13 @@
 <body>
 <div id="loading">Loading cards…</div>
 <div id="ui" style="display:none">
-  <button id="btnPlay">▶ Build</button>
-  <button id="btnReset">↺ Reset</button>
+  <div id="progressRow">
+    <input id="progressBar" type="range" min="0" max="52" step="1" value="0">
+  </div>
+  <div id="btnRow">
+    <button id="btnPlayPause">▶ Play</button>
+    <button id="btnReset">↺ Reset</button>
+  </div>
 </div>
 <div id="counter" style="display:none">0/52</div>
 
@@ -355,10 +389,18 @@ controls.update();
 // ─── Animation state ─────────────────────────────────────────
 const FLIGHT_DURATION = 1.1;
 const DELAY_BETWEEN   = 0.3;
-let animating = false, cardsDone = 0;
-let queue = [], clock = new THREE.Clock(false), globalTime = 0;
-const counter = document.getElementById('counter');
-const DECK_POS = new THREE.Vector3(5, 0, 5);
+
+let playing    = false;   // currently playing forward
+let pausing    = false;   // waiting for in-flight card to land before pausing
+let cardsDone  = 0;       // how many cards have landed
+let inFlight   = null;    // current flying card item (one at a time)
+let clock      = new THREE.Clock(false);
+let flightTime = 0;       // time elapsed in current card's flight
+
+const counter      = document.getElementById('counter');
+const progressBar  = document.getElementById('progressBar');
+const btnPlayPause = document.getElementById('btnPlayPause');
+const DECK_POS     = new THREE.Vector3(5, 0, 5);
 
 function easeInOutCubic(t) {
   return t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
@@ -370,91 +412,165 @@ function targetQuat(tgt) {
 }
 const deckQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI/2, 0, 0));
 
-// ─── Cards array (populated after textures load) ─────────────
+// ─── Cards array ─────────────────────────────────────────────
 let cards = [];
 
-function resetScene() {
-  animating = false; cardsDone = 0;
-  clock.stop(); globalTime = 0;
-  counter.textContent = '0/52';
-  // Reshuffle
-  const order = shuffle(CARD_IDS);
-  for (let i = 0; i < 52; i++) {
-    const card = cards[i];
-    // Swap front texture (children[1] = backMesh which shows frontTex)
-    card.children[1].material = new THREE.MeshBasicMaterial({ map: cardTextures[order[i]] });
-    card.position.copy(DECK_POS).add(new THREE.Vector3(0, (51 - i) * CARD_T, 0));
-    card.rotation.set(-Math.PI/2, 0, 0);
-    card.visible = true;
-  }
+// Place card i at its deck position
+function placeInDeck(i) {
+  const card = cards[i];
+  card.position.copy(DECK_POS).add(new THREE.Vector3(0, (51 - i) * CARD_T, 0));
+  card.rotation.set(-Math.PI/2, 0, 0);
 }
 
-function scheduleAll() {
-  queue = [];
-  for (let i = 0; i < 52; i++) {
-    queue.push({
-      card: cards[i], target: targets[i],
-      startTime: i * DELAY_BETWEEN,
-      launched: false, done: false,
-      startPos: null, startQuat: null,
-      endQuat: targetQuat(targets[i]),
-    });
-  }
+// Place card i instantly at its target position
+function placeAtTarget(i) {
+  const card = cards[i];
+  const tgt  = targets[i];
+  card.position.copy(tgt.pos);
+  card.setRotationFromQuaternion(targetQuat(tgt));
 }
 
-function startAnimation() {
-  resetScene();
-  scheduleAll();
-  animating = true;
+// Snap scene to exactly n cards landed (no animation)
+function snapToStep(n) {
+  inFlight   = null;
+  flightTime = 0;
+  cardsDone  = n;
+  for (let i = 0; i < 52; i++) {
+    if (i < n) placeAtTarget(i);
+    else       placeInDeck(i);
+  }
+  updateUI();
+}
+
+function updateUI() {
+  counter.textContent      = `${cardsDone}/52`;
+  progressBar.value        = cardsDone;
+  const pct = (cardsDone / 52 * 100).toFixed(1);
+  progressBar.style.setProperty('--prog', pct + '%');
+  const allDone = cardsDone === 52;
+  const atStart = cardsDone === 0;
+  if (allDone && playing) {
+    playing = false; pausing = false;
+  }
+  btnPlayPause.textContent = playing
+    ? '⏸ Pause'
+    : (allDone ? '↺ Replay' : '▶ Play');
+}
+
+// Start flying the next card (cardsDone → cardsDone+1)
+function launchNext() {
+  if (cardsDone >= 52) { playing = false; pausing = false; updateUI(); return; }
+  const i    = cardsDone;
+  const card = cards[i];
+  const tgt  = targets[i];
+  inFlight = {
+    card,
+    startPos:  card.position.clone(),
+    startQuat: deckQuat.clone(),
+    endQuat:   targetQuat(tgt),
+    endPos:    tgt.pos.clone(),
+  };
+  flightTime = 0;
   clock.start();
 }
 
-document.getElementById('btnPlay').addEventListener('click', startAnimation);
+function resetScene() {
+  playing = false; pausing = false;
+  clock.stop();
+  inFlight = null; flightTime = 0;
+  // Reshuffle
+  const order = shuffle(CARD_IDS);
+  for (let i = 0; i < 52; i++) {
+    cards[i].children[1].material =
+      new THREE.MeshBasicMaterial({ map: cardTextures[order[i]] });
+  }
+  snapToStep(0);
+}
+
+function togglePlayPause() {
+  if (cardsDone === 52 && !playing) {
+    // Replay: go back to 0 and play
+    snapToStep(0);
+    playing = true; pausing = false;
+    launchNext();
+    updateUI();
+    return;
+  }
+  if (playing) {
+    // Request pause after current card lands
+    pausing = true; playing = false;
+    updateUI();
+  } else {
+    // Resume / start
+    pausing = false; playing = true;
+    if (!inFlight) launchNext();
+    updateUI();
+  }
+}
+
+btnPlayPause.addEventListener('click', togglePlayPause);
 document.getElementById('btnReset').addEventListener('click', resetScene);
+
+// Progress bar: only snap to integer steps on pointerup/touchend
+let scrubbing = false;
+progressBar.addEventListener('pointerdown', () => { scrubbing = true; playing = false; pausing = false; clock.stop(); inFlight = null; updateUI(); });
+progressBar.addEventListener('input', () => {
+  if (!scrubbing) return;
+  const pct = (parseInt(progressBar.value) / 52 * 100).toFixed(1);
+  progressBar.style.setProperty('--prog', pct + '%');
+});
+progressBar.addEventListener('pointerup', () => {
+  scrubbing = false;
+  snapToStep(parseInt(progressBar.value));
+});
+progressBar.addEventListener('touchend', () => {
+  scrubbing = false;
+  snapToStep(parseInt(progressBar.value));
+});
 
 // ─── Render loop ─────────────────────────────────────────────
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
 
-  if (animating) {
-    globalTime += clock.getDelta();
-    let allDone = true;
-    for (const item of queue) {
-      if (item.done) continue;
-      allDone = false;
-      if (globalTime < item.startTime) continue;
-      if (!item.launched) {
-        item.launched  = true;
-        item.startPos  = item.card.position.clone();
-        item.startQuat = deckQuat.clone();
-      }
-      const elapsed = globalTime - item.startTime;
-      const t  = Math.min(elapsed / FLIGHT_DURATION, 1);
-      const te = easeInOutCubic(t);
-      const start = item.startPos, end = item.target.pos;
-      const midX = (start.x + end.x) / 2, midZ = (start.z + end.z) / 2;
-      const arcH = Math.max(2.5, start.distanceTo(end) * 0.6);
-      const midY = Math.max(start.y, end.y) + arcH;
-      const s = te;
-      item.card.position.set(
-        (1-s)*(1-s)*start.x + 2*(1-s)*s*midX + s*s*end.x,
-        (1-s)*(1-s)*start.y + 2*(1-s)*s*midY + s*s*end.y,
-        (1-s)*(1-s)*start.z + 2*(1-s)*s*midZ + s*s*end.z,
-      );
-      const q = new THREE.Quaternion();
-      q.slerpQuaternions(item.startQuat, item.endQuat, te);
-      item.card.setRotationFromQuaternion(q);
-      if (t >= 1) {
-        item.done = true;
-        item.card.position.copy(end);
-        item.card.setRotationFromQuaternion(item.endQuat);
-        cardsDone++;
-        counter.textContent = `${cardsDone}/52`;
+  if (inFlight) {
+    flightTime += clock.getDelta();
+    const t  = Math.min(flightTime / FLIGHT_DURATION, 1);
+    const te = easeInOutCubic(t);
+    const { card, startPos, endPos, startQuat, endQuat } = inFlight;
+    const midX = (startPos.x + endPos.x) / 2;
+    const midZ = (startPos.z + endPos.z) / 2;
+    const arcH = Math.max(2.5, startPos.distanceTo(endPos) * 0.6);
+    const midY = Math.max(startPos.y, endPos.y) + arcH;
+    const s = te;
+    card.position.set(
+      (1-s)*(1-s)*startPos.x + 2*(1-s)*s*midX + s*s*endPos.x,
+      (1-s)*(1-s)*startPos.y + 2*(1-s)*s*midY + s*s*endPos.y,
+      (1-s)*(1-s)*startPos.z + 2*(1-s)*s*midZ + s*s*endPos.z,
+    );
+    const q = new THREE.Quaternion();
+    q.slerpQuaternions(startQuat, endQuat, te);
+    card.setRotationFromQuaternion(q);
+
+    if (t >= 1) {
+      // Card landed
+      card.position.copy(endPos);
+      card.setRotationFromQuaternion(endQuat);
+      cardsDone++;
+      inFlight = null;
+      clock.stop();
+      updateUI();
+
+      if (pausing) {
+        // Pause now that card has landed
+        pausing = false; playing = false;
+      } else if (playing) {
+        // Wait DELAY_BETWEEN then launch next
+        setTimeout(launchNext, DELAY_BETWEEN * 1000);
       }
     }
-    if (allDone) { animating = false; clock.stop(); }
   }
+
   renderer.render(scene, camera);
 }
 
