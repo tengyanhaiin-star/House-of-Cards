@@ -273,7 +273,7 @@ function createCard(frontTex, backTex) {
   // Side edge: slightly thinner to avoid z-fighting with face meshes
   const sideT = CARD_T*0.85;
   const extGeo = new THREE.ExtrudeGeometry(shape, { depth: sideT, bevelEnabled: false });
-  const sideMesh = new THREE.Mesh(extGeo, [edgeMat, transparentMat]);
+  const sideMesh = new THREE.Mesh(extGeo, [edgeMat, edgeMat]);
   sideMesh.position.z = -sideT / 2;
   group.add(sideMesh);
 
