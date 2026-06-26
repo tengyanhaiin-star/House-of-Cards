@@ -267,7 +267,7 @@ function createCard(frontTex, backTex) {
   const backMesh = new THREE.Mesh(backGeo,
     new THREE.MeshBasicMaterial({ map: frontTex }));
   backMesh.position.z = -CARD_T * 0.4;
-  //backMesh.rotation.y = Math.PI;
+  backMesh.rotation.y = Math.PI;
   group.add(backMesh);
 
   // Side edge: slightly thinner to avoid z-fighting with face meshes
