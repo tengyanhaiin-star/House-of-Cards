@@ -242,7 +242,7 @@ function fixShapeUVs(geo) {
   geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 }
 
-const edgeMat        = new THREE.MeshBasicMaterial({ 
+const edgeMat        = new THREE.MeshStandardMaterial({ 
   color: 0xfaf0f0, roughness: 0.5,
   polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
 });
