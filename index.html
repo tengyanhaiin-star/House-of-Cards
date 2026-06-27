@@ -525,6 +525,9 @@ progressBar.addEventListener('input', () => {
   const n = parseInt(progressBar.value);
   const pct = (n / 52 * 100).toFixed(1);
   progressBar.style.setProperty('--prog', pct + '%');
+  // Always pause before seeking
+  playing = false; pausing = false;
+  clock.stop(); inFlight = null;
   snapToStep(n);
 });
 
