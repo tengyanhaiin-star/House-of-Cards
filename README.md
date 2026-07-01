@@ -9,7 +9,7 @@ Visit [House of Cards](https://tengyanhaiin-star.github.io/House-of-Cards/)
 ## Features
 
 - **52-card animation** — cards fly one at a time from a shuffled deck and land precisely into a three-layer pyramid structure
-- **Randomised deck** — cards are shuffled on every Build and Reset, so each run looks different
+- **Randomised deck** — cards are shuffled on every Reset, so each run looks different
 - **Real SVG card faces** — powered by [SVG-cards](https://github.com/htdebeer/SVG-cards) by Huub de Beer
 - **3D orbit controls** — drag to rotate, scroll to zoom, centred on the house of cards
 - **iOS compatible** — safe area insets, Retina pixel ratio, touch gesture handling
@@ -35,8 +35,8 @@ Because the app fetches `svg-cards.svg` and `NoticiaText-Regular.woff2` at runti
 |---|---|
 | Drag | Orbit around the house of cards |
 | Scroll / Pinch | Zoom in and out |
-| ▶ Build | Shuffle the deck and animate the build |
-| ↺ Reset | Return all cards to the deck |
+| ▶ Play | Animate the build |
+| ↻ Reset | Shuffle the deck |
 
 ## Dependencies
 
